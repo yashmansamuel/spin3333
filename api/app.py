@@ -6,7 +6,7 @@ import bcrypt
 # CONFIG
 # -------------------------
 URL = "https://ujclhweqqifgoiscvqmd.supabase.co"
-KEY = "YOUR_SERVICE_ROLE_KEY"   # ⚠️ change this
+KEY = "sb_publishable_soPYxakWGl9MTrzCjdjt2w_fR1jsVVf"   # ⚠️ change this
 TABLE = "app_users"
 
 # -------------------------
