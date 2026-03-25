@@ -1,55 +1,79 @@
-import os
-from flask import Flask, request, jsonify
-from supabase import create_client, Client
-from flask_cors import CORS
+from http.server import BaseHTTPRequestHandler
+import json
+from supabase import create_client
+import bcrypt
 
-app = Flask(__name__)
-CORS(app)
+URL = "https://ujclhweqqifgoiscvqmd.supabase.co"
+KEY = "YOUR_SERVICE_ROLE_KEY"   # ⚠️ MUST change
+TABLE = "app_users"
 
-# Vercel Environment Variables se values uthayi jayengi
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+supabase = create_client(URL, KEY)
 
-# Check karein ke keys missing to nahi
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("SUPABASE_URL ya SUPABASE_KEY Environment Variables set nahi hain!")
+class handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        try:
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            path = self.path
 
-@app.route('/api/signup', methods=['POST'])
-def signup():
-    try:
-        data = request.get_json()
-        
-        email = data.get('email')
-        password = data.get('password')
-        full_name = data.get('name')
+            # ---------------- SIGNUP ----------------
+            if path == "/signup":
+                username = data.get("username")
+                password = data.get("password")
 
-        if not email or not password or not full_name:
-            return jsonify({"error": "Name, Email aur Password zaroori hain"}), 400
+                if not username or not password:
+                    return self.send_json({"error": "Username & password required"}, 400)
 
-        # Supabase Auth Logic
-        response = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "full_name": full_name
-                }
-            }
-        })
+                username = username.lower()
 
-        if response.user:
-            return jsonify({
-                "status": "success",
-                "message": "User successfully created!",
-                "user_id": response.user.id
-            }), 201
-        
-        return jsonify({"error": "Registration failed"}), 400
+                existing = supabase.table(TABLE).select("*").eq("username", username).execute()
+                if existing.data:
+                    return self.send_json({"error": "Username already taken"}, 400)
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+                hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-# Vercel deployment ke liye app instance
-app = app
+                res = supabase.table(TABLE).insert({
+                    "username": username,
+                    "password": hashed
+                }).execute()
+
+                if not res.data:
+                    return self.send_json({"error": "Insert failed"}, 500)
+
+                return self.send_json({"message": "User created"}, 200)
+
+            # ---------------- LOGIN ----------------
+            elif path == "/login":
+                username = data.get("username")
+                password = data.get("password")
+
+                if not username or not password:
+                    return self.send_json({"error": "Username & password required"}, 400)
+
+                username = username.lower()
+
+                user = supabase.table(TABLE).select("*").eq("username", username).execute()
+
+                if not user.data:
+                    return self.send_json({"error": "User not found"}, 404)
+
+                stored = user.data[0]["password"]
+
+                if not bcrypt.checkpw(password.encode(), stored.encode()):
+                    return self.send_json({"error": "Wrong password"}, 401)
+
+                return self.send_json({"message": "Login successful"}, 200)
+
+            else:
+                return self.send_json({"error": "Invalid route"}, 404)
+
+        except Exception as e:
+            return self.send_json({"error": str(e)}, 500)
+
+    def send_json(self, data, status):
+        self.send_response(status)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
