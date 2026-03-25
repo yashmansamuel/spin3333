@@ -1,5 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/signup.py" }
+  "routes": [
+    { "src": "/signup", "dest": "/api/index.py" },
+    { "src": "/login", "dest": "/api/index.py" }
   ]
 }
